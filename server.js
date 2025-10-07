@@ -66,3 +66,41 @@ io.on('connection', (socket) => {
 // --- Start Server ---
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+
+
+// in server.js, inside io.on('connection', ...)
+
+// --- NEW: WebRTC Signaling Logic ---
+
+// Forward a call offer to the recipient
+socket.on('webrtc-offer', (data) => {
+    const { recipientId, offer } = data;
+    // The 'io.to().emit()' sends a message to a specific user's private room
+    io.to(recipientId.toString()).emit('webrtc-offer', {
+        senderId: currentUserId,
+        offer: offer
+    });
+});
+
+// Forward a call answer back to the caller
+socket.on('webrtc-answer', (data) => {
+    const { recipientId, answer } = data;
+    io.to(recipientId.toString()).emit('webrtc-answer', {
+        senderId: currentUserId,
+        answer: answer
+    });
+});
+
+// Forward ICE candidates to the other peer
+socket.on('webrtc-ice-candidate', (data) => {
+    const { recipientId, candidate } = data;
+    io.to(recipientId.toString()).emit('webrtc-ice-candidate', {
+        senderId: currentUserId,
+        candidate: candidate
+    });
+});
+
+socket.on('webrtc-hang-up', (data) => {
+    const { recipientId } = data;
+    io.to(recipientId.toString()).emit('webrtc-hang-up');
+});
