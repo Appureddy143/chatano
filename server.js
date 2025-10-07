@@ -32,75 +32,74 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware);
 
-// --- THIS IS THE FIX ---
-// Serve static assets like CSS, client-side JS, and videos
+// --- Static File & Page Serving ---
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/videos', express.static(path.join(__dirname, 'videos')));
-
-// Explicitly define routes for each of your PHP/HTML pages
-const publicPath = path.join(__dirname, 'public');
-app.get('/', (req, res) => res.sendFile(path.join(publicPath, 'index.php')));
-app.get('/guest-portal.php', (req, res) => res.sendFile(path.join(publicPath, 'guest-portal.php')));
-app.get('/guest-chat.php', (req, res) => res.sendFile(path.join(publicPath, 'guest-chat.php')));
-app.get('/login.php', (req, res) => res.sendFile(path.join(publicPath, 'login.php')));
-app.get('/register.php', (req, res) => res.sendFile(path.join(publicPath, 'register.php')));
-
-// Middleware to protect the dashboard route
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.php')));
 const requireLogin = (req, res, next) => {
     if (!req.session.userId) return res.redirect('/login.php');
     next();
 };
-app.get('/dashboard.php', requireLogin, (req, res) => res.sendFile(path.join(publicPath, 'dashboard.php')));
+app.get('/dashboard.php', requireLogin, (req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.php')));
 
+// --- API Routes (Auth, Friends) ---
+// ... (Your existing API routes for /register, /login, friends, etc., go here)
 
-// --- API Routes (Login, Register, Friends - same as before) ---
-// ... (Your existing API routes for /register, /login, /logout, /api/user, /api/friends/* go here)
-
-
-// --- Real-time Chat Logic (same as before) ---
+// =================================================================
+// --- THIS IS THE MAIN REAL-TIME CONNECTION BLOCK ---
+// =================================================================
 io.on('connection', (socket) => {
-    // ... (Your existing io.on('connection') logic goes here)
-});
+    const session = socket.request.session;
+    const roomCode = socket.handshake.query.room;
+    
+    // --- GUEST CHAT LOGIC ---
+    if (roomCode) {
+        socket.join(roomCode);
+        console.log(`User ${socket.id} connected to GUEST room: ${roomCode}`);
+        socket.emit('welcome', socket.id);
+        socket.on('new_message', (msg) => {
+            // ... (guest chat message logic)
+        });
+    }
 
+    // --- LOGGED-IN USER LOGIC ---
+    if (session && session.userId) {
+        const currentUserId = session.userId;
+        socket.join(currentUserId.toString());
+        console.log(`User ${session.username} (ID: ${currentUserId}) connected for PRIVATE chat.`);
+
+        // --- PRIVATE MESSAGING LOGIC ---
+        socket.on('private_message', (data) => {
+            // ... (private message logic)
+        });
+
+        // --- WebRTC SIGNALING LOGIC (MUST BE INSIDE HERE) ---
+        socket.on('webrtc-offer', (data) => {
+            const { recipientId, offer } = data;
+            io.to(recipientId.toString()).emit('webrtc-offer', { senderId: currentUserId, offer });
+        });
+        socket.on('webrtc-answer', (data) => {
+            const { recipientId, answer } = data;
+            io.to(recipientId.toString()).emit('webrtc-answer', { senderId: currentUserId, answer });
+        });
+        socket.on('webrtc-ice-candidate', (data) => {
+            const { recipientId, candidate } = data;
+            io.to(recipientId.toString()).emit('webrtc-ice-candidate', { senderId: currentUserId, candidate });
+        });
+        socket.on('webrtc-hang-up', (data) => {
+            const { recipientId } = data;
+            io.to(recipientId.toString()).emit('webrtc-hang-up');
+        });
+    }
+
+    socket.on('disconnect', () => {
+        console.log(`User ${socket.id} disconnected.`);
+    });
+});
+// =================================================================
+// --- END OF THE MAIN REAL-TIME CONNECTION BLOCK ---
+// =================================================================
 
 // --- Start Server ---
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
-
-
-// in server.js, inside io.on('connection', ...)
-
-// --- NEW: WebRTC Signaling Logic ---
-
-// Forward a call offer to the recipient
-socket.on('webrtc-offer', (data) => {
-    const { recipientId, offer } = data;
-    // The 'io.to().emit()' sends a message to a specific user's private room
-    io.to(recipientId.toString()).emit('webrtc-offer', {
-        senderId: currentUserId,
-        offer: offer
-    });
-});
-
-// Forward a call answer back to the caller
-socket.on('webrtc-answer', (data) => {
-    const { recipientId, answer } = data;
-    io.to(recipientId.toString()).emit('webrtc-answer', {
-        senderId: currentUserId,
-        answer: answer
-    });
-});
-
-// Forward ICE candidates to the other peer
-socket.on('webrtc-ice-candidate', (data) => {
-    const { recipientId, candidate } = data;
-    io.to(recipientId.toString()).emit('webrtc-ice-candidate', {
-        senderId: currentUserId,
-        candidate: candidate
-    });
-});
-
-socket.on('webrtc-hang-up', (data) => {
-    const { recipientId } = data;
-    io.to(recipientId.toString()).emit('webrtc-hang-up');
-});
