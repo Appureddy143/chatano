@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Your Dashboard</title>
+    <script src="https://download.libsodium.org/libsodium.js/v0.7.13/libsodium.js"></script>
     <link rel="stylesheet" href="style.css">
     
     <!-- Include the new security script -->
