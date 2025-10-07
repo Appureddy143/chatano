@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Guest Chat Room</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/security.js" defer></script>
     <link rel="stylesheet" href="style.css"> <style>
         /* Styles specific to the chat page */
         body {
