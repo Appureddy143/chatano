@@ -7,21 +7,16 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// --- THIS IS THE NEW PART ---
-// This tells Express how to find and serve your .php files as HTML.
-app.use((req, res, next) => {
-    if (req.path.endsWith('.php')) {
-        const filePath = path.join(__dirname, 'public', req.path);
-        // Serve the .php file with a 'text/html' content type
-        return res.sendFile(filePath, { headers: { 'Content-Type': 'text/html' } });
-    }
-    // For all other files, continue to the next middleware
-    next();
+// --- THIS IS THE FIX ---
+// Explicitly serve index.html for the root route '/'
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Serve static files from the 'public' directory
+// Serve all static files (like CSS, JS, and other HTML files) from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/videos', express.static(path.join(__dirname, 'videos')));
+
 
 // --- Real-time Chat Logic (remains the same) ---
 io.on('connection', (socket) => {
@@ -38,9 +33,15 @@ io.on('connection', (socket) => {
   socket.on('new_message', (msg) => {
     const messageId = `msg-${Date.now()}`;
     const sanitizedMsg = String(msg || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    
     if (sanitizedMsg.trim().length === 0) return;
 
-    const messageData = { id: messageId, senderId: socket.id, text: sanitizedMsg };
+    const messageData = {
+      id: messageId,
+      senderId: socket.id,
+      text: sanitizedMsg
+    };
+
     io.to(roomCode).emit('new_message', messageData);
     console.log(`Message broadcast in room '${roomCode}'`);
 
@@ -53,6 +54,7 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.id} disconnected from room: ${roomCode}`);
   });
 });
+
 
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
