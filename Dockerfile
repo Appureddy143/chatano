@@ -4,17 +4,15 @@ FROM node:18-slim
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
-# Copy package.json and package-lock.json
+# Copy package.json and install dependencies
 COPY package*.json ./
-
-# Install any needed packages
 RUN npm install
 
-# Bundle app source
+# Copy the rest of your application's code
 COPY . .
 
-# Your app binds to port 8080, so expose it
-EXPOSE 8080
+# Your app binds to this port
+EXPOSE 10000
 
 # Define the command to run your app
 CMD [ "npm", "start" ]
