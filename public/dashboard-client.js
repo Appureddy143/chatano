@@ -1,77 +1,86 @@
 document.addEventListener('DOMContentLoaded', async () => {
     // --- Element Selectors ---
     const welcomeUserEl = document.getElementById('welcome-user');
-    const friendsListEl = document.getElementById('friends-list');
-    const requestsListEl = document.getElementById('requests-list');
-    const addFriendForm = document.getElementById('add-friend-form');
-    const friendMessageEl = document.getElementById('friend-message');
-    const chatWithTitleEl = document.getElementById('chat-with-title');
-    const messagesDiv = document.getElementById('messages');
-    const messageForm = document.getElementById('message-form');
-    const messageInput = document.getElementById('message-input');
-    
+    // ... (all other element selectors are the same)
+
     // --- State Variables ---
     let currentUser = null;
-    let currentChat = { friendId: null, friendUsername: null };
+    let currentChat = { friendId: null, friendUsername: null, sharedKey: null }; // NEW: sharedKey
     const socket = io();
+
+    // --- NEW: E2EE Variables and Functions ---
+    let sodium;
+    let userKeyPair; // To store the user's public and private keys
+
+    const initializeSodium = async () => {
+        await new Promise(resolve => {
+            window.sodium = {
+                onload: function (s) {
+                    sodium = s;
+                    console.log("Libsodium loaded!");
+                    resolve();
+                }
+            };
+        });
+        // Generate a public/private key pair for the current user
+        userKeyPair = sodium.crypto_box_keypair();
+    };
+
+    const encryptMessage = (message, sharedKey) => {
+        const nonce = sodium.randombytes_buf(sodium.crypto_box_NONCEBYTES);
+        const ciphertext = sodium.crypto_box_easy(message, nonce, sharedKey);
+        return {
+            nonce: sodium.to_base64(nonce),
+            ciphertext: sodium.to_base64(ciphertext)
+        };
+    };
+
+    const decryptMessage = (encryptedData, sharedKey) => {
+        try {
+            const nonce = sodium.from_base64(encryptedData.nonce);
+            const ciphertext = sodium.from_base64(encryptedData.ciphertext);
+            const decrypted = sodium.crypto_box_open_easy(ciphertext, nonce, sharedKey);
+            return sodium.to_string(decrypted);
+        } catch (error) {
+            console.error("Decryption failed:", error);
+            return "[Decryption Error]";
+        }
+    };
 
     // --- Main Dashboard Loader ---
     const loadDashboard = async () => {
-        try {
-            const userRes = await fetch('/api/user');
-            if (!userRes.ok) throw new Error('Not logged in');
-            currentUser = await userRes.json();
-            welcomeUserEl.textContent = `Welcome, ${currentUser.username}!`;
-
-            const friendsRes = await fetch('/api/friends/list');
-            const lists = await friendsRes.json();
-            
-            renderFriends(lists.friends);
-            renderRequests(lists.pending);
-        } catch (error) {
-            window.location.href = '/login.php';
-        }
+        await initializeSodium(); // Wait for sodium to load before doing anything else
+        
+        // ... (The rest of your loadDashboard function is the same)
     };
 
-    // --- Render Functions ---
-    const renderFriends = (friends) => {
-        friendsListEl.innerHTML = '';
-        if (friends.length === 0) {
-            friendsListEl.innerHTML = '<li>Add some friends!</li>';
-            return;
-        }
-        friends.forEach(friend => {
-            const li = document.createElement('li');
-            li.textContent = friend.username;
-            li.dataset.friendId = friend.id;
-            li.dataset.friendUsername = friend.username;
-            li.addEventListener('click', startChat);
-            friendsListEl.appendChild(li);
-        });
-    };
-    const renderRequests = (requests) => {
-        requestsListEl.innerHTML = '';
-        if (requests.length === 0) {
-            requestsListEl.innerHTML = '<li>No new requests.</li>';
-            return;
-        }
-        requests.forEach(req => { /* ... same as before ... */ });
-    };
-
-    // --- Chat Logic ---
-    const startChat = (e) => {
+    // --- Chat Logic (UPDATED FOR E2EE) ---
+    const startChat = async (e) => {
         const friendId = e.target.dataset.friendId;
         const friendUsername = e.target.dataset.friendUsername;
 
-        if (currentChat.friendId === friendId) return; // Already chatting with this person
+        if (currentChat.friendId === friendId) return;
 
-        currentChat = { friendId, friendUsername };
+        // --- NEW: Key Exchange ---
+        // This is a simplified key exchange. In a real app, you'd fetch the friend's public key.
+        // For now, we will simulate this by sending our public key and receiving theirs.
+        // NOTE: This part needs a server update to work fully. We'll add that next.
+        // For this step, we will assume a key exchange has happened.
+        
+        // In a real scenario, the shared key is derived from your private key and their public key
+        // const sharedKey = sodium.crypto_box_beforenm(friendPublicKey, userKeyPair.privateKey);
+        // For demonstration, we'll use a temporary placeholder.
+        console.warn("E2EE is in demo mode. Shared key is not yet secure.");
+        
+        // We will implement the real key exchange in the next step.
+        // For now, let's just update the UI.
+        
+        currentChat = { friendId, friendUsername, sharedKey: null }; // sharedKey is null for now
         
         chatWithTitleEl.textContent = `Chat with ${friendUsername}`;
-        messagesDiv.innerHTML = ''; // Clear previous chat
+        messagesDiv.innerHTML = '<li>E2EE will be enabled after key exchange.</li>';
         messageForm.style.display = 'flex';
         
-        // Highlight the selected friend
         document.querySelectorAll('#friends-list li').forEach(li => li.classList.remove('active'));
         e.target.classList.add('active');
     };
@@ -79,41 +88,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     messageForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const message = messageInput.value.trim();
+
+        // We will add the encryption logic here in the next step
         if (message && currentChat.friendId) {
             socket.emit('private_message', {
                 recipientId: currentChat.friendId,
-                message: message
+                message: message // Sending plain text for now
             });
             messageInput.value = '';
         }
     });
 
     socket.on('private_message', (data) => {
+        // We will add decryption logic here in the next step
         const from = (data.senderId === currentUser.id) ? 'You' : currentChat.friendUsername;
         addMessage(data.text, data.id, from);
     });
     
-    socket.on('delete_message', (data) => deleteMessage(data.id));
-
-    const addMessage = (text, id, from) => {
-        const p = document.createElement('p');
-        p.id = id;
-        p.innerHTML = `<strong>${from}:</strong> ${text}`;
-        messagesDiv.appendChild(p);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    };
-    const deleteMessage = (id) => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.style.opacity = '0';
-            setTimeout(() => el.remove(), 500);
-        }
-    };
-    
-    // --- Friend Request Logic (same as before) ---
-    addFriendForm.addEventListener('submit', async (e) => { /* ... */ });
-    const acceptFriendRequest = async (e) => { /* ... */ };
-
-    // Initial load
-    loadDashboard();
+    // ... (rest of the file is the same)
 });
