@@ -1,51 +1,55 @@
+const express = require('express');
 const http = require('http');
-const WebSocket = require('ws');
+const path = require('path');
+const { Server } = require("socket.io");
 
-// Create a standard HTTP server
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('WebSocket server is running');
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+// Serve all static files (HTML, CSS, JS) from the 'public' directory
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/videos', express.static(path.join(__dirname, 'videos')));
+
+// --- Real-time Chat Logic ---
+io.on('connection', (socket) => {
+  const roomCode = socket.handshake.query.room;
+  if (!roomCode) {
+    return socket.disconnect();
+  }
+
+  socket.join(roomCode);
+  console.log(`User ${socket.id} connected to room: ${roomCode}`);
+
+  socket.emit('welcome', socket.id);
+
+  socket.on('new_message', (msg) => {
+    const messageId = `msg-${Date.now()}`;
+    // Sanitize message to prevent any HTML from being rendered
+    const sanitizedMsg = String(msg || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    
+    if (sanitizedMsg.trim().length === 0) return;
+
+    const messageData = {
+      id: messageId,
+      senderId: socket.id,
+      text: sanitizedMsg
+    };
+
+    io.to(roomCode).emit('new_message', messageData);
+    console.log(`Message broadcast in room '${roomCode}'`);
+
+    setTimeout(() => {
+      io.to(roomCode).emit('delete_message', { id: messageId });
+    }, 30000); // 30 seconds
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`User ${socket.id} disconnected from room: ${roomCode}`);
+  });
 });
 
-// Create a WebSocket server and attach it to the HTTP server
-const wss = new WebSocket.Server({ server });
-
-// --- THIS IS THE CRITICAL FIX ---
-// Use the port provided by Render's environment variable, or default to 8080
-const PORT = process.env.PORT || 8080;
-
-// This function will broadcast a message to all connected clients
-function broadcast(message) {
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-        }
-    });
-}
-
-// Set up a connection listener for the WebSocket server
-wss.on('connection', (ws) => {
-    console.log('A new client connected!');
-
-    // Listen for messages from this specific client
-    ws.on('message', (message) => {
-        const messageString = message.toString();
-        console.log('Received message =>', messageString);
-        broadcast(messageString);
-    });
-
-    // Listen for this client to disconnect
-    ws.on('close', () => {
-        console.log('Client has disconnected.');
-    });
-
-    ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
-    });
-});
-
-// Start the HTTP server
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
-    // This message will now show the correct port on Render
-    console.log(`Server is listening on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
