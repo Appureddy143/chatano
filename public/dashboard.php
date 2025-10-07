@@ -49,13 +49,26 @@
         </div>
         
         <!-- Main Chat Area -->
-        <div class="chat-area">
-            <h2 id="chat-with-title">Select a friend to start chatting</h2>
-            
-            <!-- Messages Display -->
-            <div id="messages">
-                <!-- Chat messages will appear here -->
-            </div>
+<div class="chat-area">
+    <div class="chat-header">
+        <h2 id="chat-with-title">Select a friend to start chatting</h2>
+        <div id="call-buttons" style="display: none;">
+            <button id="video-call-btn">Video Call</button>
+            <button id="hang-up-btn" style="display: none;">Hang Up</button>
+        </div>
+    </div>
+
+    <div id="video-container" style="display: none;">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <video id="localVideo" autoplay playsinline muted></video>
+    </div>
+
+    <div id="messages"></div>
+    <form id="message-form" style="display: none;">
+        <input type="text" id="message-input" autocomplete="off" placeholder="Type a message..." required>
+        <button type="submit">Send</button>
+    </form>
+</div>
             
             <!-- Message Input Form (hidden by default) -->
             <form id="message-form" style="display: none;">
